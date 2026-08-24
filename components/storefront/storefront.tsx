@@ -20,6 +20,7 @@ import {
   MessageCircle,
   SlidersHorizontal,
   Settings,
+  ChevronLeft,
   ChevronRight,
   Landmark,
   Banknote,
@@ -274,10 +275,47 @@ export function Storefront({
     }
   }, [products, selectedCategoryId, searchQuery, sortBy, categoryMap]);
 
-  // Producto destacado para el banner
-  const heroFeaturedProduct = useMemo(() => {
-    return products.find((p) => p.is_featured && p.active) || products[0];
+  // Productos destacados para el carrusel del banner hero
+  const featuredProducts = useMemo(() => {
+    const featured = products.filter((p) => p.is_featured && p.active);
+    if (featured.length > 0) return featured;
+    const firstActive = products.find((p) => p.active);
+    return firstActive ? [firstActive] : products.slice(0, 1);
   }, [products]);
+
+  const [featuredIndex, setFeaturedIndex] = useState(0);
+  const [isFeaturedPaused, setIsFeaturedPaused] = useState(false);
+
+  // Mantener el índice dentro de los límites si cambia la lista
+  useEffect(() => {
+    if (featuredIndex >= featuredProducts.length) {
+      setFeaturedIndex(0);
+    }
+  }, [featuredProducts.length, featuredIndex]);
+
+  // Rotación automática cada 4.5 segundos si hay múltiples productos destacados
+  useEffect(() => {
+    if (featuredProducts.length <= 1 || isFeaturedPaused) return;
+
+    const interval = setInterval(() => {
+      setFeaturedIndex((prev) => (prev + 1) % featuredProducts.length);
+    }, 4500);
+
+    return () => clearInterval(interval);
+  }, [featuredProducts.length, isFeaturedPaused]);
+
+  const activeFeaturedProduct =
+    featuredProducts[featuredIndex] || featuredProducts[0];
+
+  const handleNextFeatured = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setFeaturedIndex((prev) => (prev + 1) % featuredProducts.length);
+  };
+
+  const handlePrevFeatured = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setFeaturedIndex((prev) => (prev - 1 + featuredProducts.length) % featuredProducts.length);
+  };
 
   // Generar link de pedido por WhatsApp 100% dinámico
   const handleWhatsAppCheckout = () => {
@@ -363,11 +401,10 @@ export function Storefront({
 
       {/* Main Header / Navigation con elevación dinámica */}
       <header
-        className={`sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b transition-all duration-300 ${
-          isScrolled
+        className={`sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b transition-all duration-300 ${isScrolled
             ? "border-border shadow-md py-0 bg-card/95"
             : "border-border/60 shadow-none bg-card/85"
-        }`}
+          }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
           {/* Brand Logo & Name Dinámico */}
@@ -439,9 +476,8 @@ export function Storefront({
               <span className="hidden xs:inline">Mi Pedido</span>
               {totalItemsCount > 0 ? (
                 <span
-                  className={`flex items-center justify-center px-2 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-extrabold shadow-sm transition-transform ${
-                    cartBump ? "animate-badge-bump" : ""
-                  }`}
+                  className={`flex items-center justify-center px-2 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-extrabold shadow-sm transition-transform ${cartBump ? "animate-badge-bump" : ""
+                    }`}
                 >
                   {totalItemsCount}
                 </span>
@@ -458,10 +494,6 @@ export function Storefront({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             <div className="lg:col-span-7 space-y-5">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-card border border-border shadow-xs text-xs font-semibold text-primary animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <Heart className="h-3.5 w-3.5 text-accent-foreground fill-accent animate-pulse" />
-                <span>Masa madre, manteca pura y amor por la cocina</span>
-              </div>
               <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-normal tracking-tight text-primary leading-[1.1] animate-in fade-in slide-in-from-bottom-3 duration-400 stagger-1">
                 {store.hero_title || "Pastelería fresca horneada para alegrar tu día."}
               </h1>
@@ -519,40 +551,125 @@ export function Storefront({
               </div>
             </div>
 
-            {/* Hero Image Showcase con animación de elevación y shimmer */}
-            <div id="destacados" className="lg:col-span-5 relative animate-in fade-in duration-500">
-              <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-card bg-card aspect-[4/3] sm:aspect-[16/11] group hover:shadow-primary/10 transition-all duration-500">
-                <img
-                  src={
-                    store.hero_image_url ||
-                    "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=800&q=80"
-                  }
-                  alt={store.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
-                {heroFeaturedProduct && (
-                  <div
-                    onClick={() => setQuickViewProduct(heroFeaturedProduct)}
-                    className="cursor-pointer absolute bottom-4 left-4 right-4 p-4 rounded-2xl bg-card/95 backdrop-blur-md border border-border flex items-center justify-between shadow-lg transition-transform duration-300 hover:scale-[1.01]"
-                  >
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-accent-foreground bg-accent/30 px-2 py-0.5 rounded-full">
-                        {heroFeaturedProduct.badge || "Recomendado de hoy"}
+            {/* Hero Image Showcase con carrusel para múltiples productos destacados */}
+            <div
+              id="destacados"
+              className="lg:col-span-5 relative animate-in fade-in duration-500"
+              onMouseEnter={() => setIsFeaturedPaused(true)}
+              onMouseLeave={() => setIsFeaturedPaused(false)}
+            >
+              <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-card bg-card flex flex-col group hover:shadow-primary/10 transition-all duration-500 select-none">
+                {/* Contenedor de la Imagen del Carrusel */}
+                <div className="relative w-full aspect-[4/3] sm:aspect-[16/11] overflow-hidden bg-muted/20">
+                  {/* Slides de imágenes con transición suave */}
+                  {featuredProducts.map((p, idx) => (
+                    <div
+                      key={p.id}
+                      className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+                        idx === featuredIndex
+                          ? "opacity-100 z-0"
+                          : "opacity-0 pointer-events-none -z-10"
+                      }`}
+                    >
+                      <img
+                        src={
+                          p.image_url ||
+                          store.hero_image_url ||
+                          "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=800&q=80"
+                        }
+                        alt={p.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                      />
+                    </div>
+                  ))}
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/30 pointer-events-none z-10" />
+
+                  {/* Contador e indicador de productos destacados arriba a la derecha */}
+                  {featuredProducts.length > 1 && (
+                    <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/15 text-[11px] font-semibold text-white shadow-sm">
+                      <Sparkles className="h-3 w-3 text-amber-300 animate-pulse" />
+                      <span>
+                        {featuredIndex + 1} de {featuredProducts.length} destacados
                       </span>
-                      <p className="font-serif text-lg font-bold text-primary mt-1">
-                        {heroFeaturedProduct.name}
+                    </div>
+                  )}
+
+                  {/* Indicadores / Píldoras arriba a la izquierda */}
+                  {featuredProducts.length > 1 && (
+                    <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2.5 py-1.5 rounded-full border border-white/15">
+                      {featuredProducts.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFeaturedIndex(idx);
+                          }}
+                          aria-label={`Ir al producto destacado ${idx + 1}`}
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            idx === featuredIndex
+                              ? "w-6 bg-primary"
+                              : "w-2 bg-white/50 hover:bg-white/90"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Flechas de navegación si hay más de 1 producto */}
+                  {featuredProducts.length > 1 && (
+                    <>
+                      <button
+                        onClick={handlePrevFeatured}
+                        aria-label="Producto destacado anterior"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 active:scale-95 shadow-lg"
+                      >
+                        <ChevronLeft className="h-5 w-5 -ml-0.5" />
+                      </button>
+                      <button
+                        onClick={handleNextFeatured}
+                        aria-label="Producto destacado siguiente"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 active:scale-95 shadow-lg"
+                      >
+                        <ChevronRight className="h-5 w-5 ml-0.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Tarjeta inferior con información del producto destacado activo (debajo de la imagen sin taparla) */}
+                {activeFeaturedProduct && (
+                  <div
+                    key={activeFeaturedProduct.id}
+                    onClick={() => setQuickViewProduct(activeFeaturedProduct)}
+                    className="cursor-pointer p-4 sm:p-5 bg-card border-t border-border flex items-center justify-between transition-colors hover:bg-secondary/40 animate-in fade-in duration-300"
+                  >
+                    <div className="min-w-0 flex-1 pr-3">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-accent-foreground bg-accent/30 px-2 py-0.5 rounded-full inline-block">
+                          {activeFeaturedProduct.badge || "Destacado de hoy"}
+                        </span>
+                        <span className="text-sm font-bold text-primary">
+                          {formatMoney(
+                            activeFeaturedProduct.price,
+                            store.currency_symbol
+                          )}
+                        </span>
+                      </div>
+                      <p className="font-serif text-lg sm:text-xl font-bold text-primary truncate">
+                        {activeFeaturedProduct.name}
                       </p>
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {heroFeaturedProduct.description || "Elaboración artesanal fresca"}
+                      <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                        {activeFeaturedProduct.description ||
+                          "Elaboración artesanal fresca"}
                       </p>
                     </div>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        addToCart(heroFeaturedProduct);
+                        addToCart(activeFeaturedProduct);
                       }}
-                      className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:scale-105 active:scale-90 transition-transform shadow-md shrink-0 ml-2 press-feedback"
+                      className="h-11 w-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:scale-105 active:scale-90 transition-transform shadow-md shrink-0 ml-2 press-feedback"
                       title="Agregar al pedido"
                     >
                       <Plus className="h-5 w-5" />
@@ -621,19 +738,17 @@ export function Storefront({
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none snap-x touch-pan-x">
             <button
               onClick={() => setSelectedCategoryId("all")}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-200 flex items-center gap-2 press-feedback snap-start ${
-                selectedCategoryId === "all"
+              className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-200 flex items-center gap-2 press-feedback snap-start ${selectedCategoryId === "all"
                   ? "bg-primary text-primary-foreground shadow-md shadow-primary/20 scale-[1.02]"
                   : "bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
-              }`}
+                }`}
             >
               <span>Todos</span>
               <span
-                className={`text-xs px-1.5 py-0.5 rounded-full transition-colors ${
-                  selectedCategoryId === "all"
+                className={`text-xs px-1.5 py-0.5 rounded-full transition-colors ${selectedCategoryId === "all"
                     ? "bg-primary-foreground/20 text-primary-foreground"
                     : "bg-secondary text-muted-foreground"
-                }`}
+                  }`}
               >
                 {products.filter((p) => p.active).length}
               </span>
@@ -649,19 +764,17 @@ export function Storefront({
                 <button
                   key={category.id}
                   onClick={() => setSelectedCategoryId(category.id)}
-                  className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-200 flex items-center gap-2 press-feedback snap-start ${
-                    isSelected
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-200 flex items-center gap-2 press-feedback snap-start ${isSelected
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/20 scale-[1.02]"
                       : "bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
-                  }`}
+                    }`}
                 >
                   <span>{category.name}</span>
                   <span
-                    className={`text-xs px-1.5 py-0.5 rounded-full transition-colors ${
-                      isSelected
+                    className={`text-xs px-1.5 py-0.5 rounded-full transition-colors ${isSelected
                         ? "bg-primary-foreground/20 text-primary-foreground"
                         : "bg-secondary text-muted-foreground"
-                    }`}
+                      }`}
                   >
                     {count}
                   </span>
@@ -1020,277 +1133,273 @@ export function Storefront({
               </button>
             </div>
 
-              {/* Free shipping progress con animación fluida */}
-              {subtotal > 0 && store.free_shipping_threshold > 0 && (
-                <div className="px-5 py-3 bg-accent/20 border-b border-accent/30 text-xs">
-                  {subtotal >= store.free_shipping_threshold ? (
-                    <div className="flex items-center gap-2 font-bold text-accent-foreground animate-in zoom-in-95 duration-200">
-                      <Check className="h-4 w-4" />
-                      <span>¡Felicitaciones! Tenés envío gratis en este pedido.</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-[11px] text-accent-foreground font-semibold">
-                        <span>
-                          Sumá {formatMoney(store.free_shipping_threshold - subtotal, store.currency_symbol)} más para <strong>Envío Gratis</strong>
-                        </span>
-                      </div>
-                      <div className="h-2 w-full bg-card rounded-full overflow-hidden border border-accent/40">
-                        <div
-                          className="h-full bg-primary transition-all duration-500 ease-out"
-                          style={{
-                            width: `${Math.min(100, (subtotal / store.free_shipping_threshold) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Cart Items List */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 overscroll-contain">
-                {cart.length === 0 ? (
-                  <div className="text-center py-16 space-y-4 animate-in fade-in duration-200">
-                    <div className="h-16 w-16 rounded-full bg-secondary mx-auto flex items-center justify-center text-muted-foreground">
-                      <ShoppingCart className="h-8 w-8 stroke-1" />
-                    </div>
-                    <div>
-                      <h3 className="font-serif text-xl font-bold text-primary">El carrito está vacío</h3>
-                      <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
-                        Agregá deliciosos productos artesanales para comenzar.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setIsCartOpen(false)}
-                      className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs hover:opacity-90 active:scale-95 transition-all press-feedback"
-                    >
-                      Explorar el catálogo
-                    </button>
+            {/* Free shipping progress con animación fluida */}
+            {subtotal > 0 && store.free_shipping_threshold > 0 && (
+              <div className="px-5 py-3 bg-accent/20 border-b border-accent/30 text-xs">
+                {subtotal >= store.free_shipping_threshold ? (
+                  <div className="flex items-center gap-2 font-bold text-accent-foreground animate-in zoom-in-95 duration-200">
+                    <Check className="h-4 w-4" />
+                    <span>¡Felicitaciones! Tenés envío gratis en este pedido.</span>
                   </div>
                 ) : (
-                  <>
-                    <div className="space-y-3">
-                      {cart.map((item) => (
-                        <div
-                          key={item.product.id}
-                          className="flex items-center gap-3 p-3 rounded-2xl bg-secondary/40 border border-border transition-all duration-200 hover:border-primary/30"
-                        >
-                          <img
-                            src={
-                              item.product.image_url ||
-                              "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80"
-                            }
-                            alt={item.product.name}
-                            className="h-14 w-14 rounded-xl object-cover shrink-0"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-xs text-primary truncate">
-                              {item.product.name}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {formatMoney(item.product.price, store.currency_symbol)} c/u
-                            </p>
-                            <p className="text-xs font-bold text-primary mt-0.5">
-                              Subtotal: {formatMoney(item.product.price * item.quantity, store.currency_symbol)}
-                            </p>
-                          </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[11px] text-accent-foreground font-semibold">
+                      <span>
+                        Sumá {formatMoney(store.free_shipping_threshold - subtotal, store.currency_symbol)} más para <strong>Envío Gratis</strong>
+                      </span>
+                    </div>
+                    <div className="h-2 w-full bg-card rounded-full overflow-hidden border border-accent/40">
+                      <div
+                        className="h-full bg-primary transition-all duration-500 ease-out"
+                        style={{
+                          width: `${Math.min(100, (subtotal / store.free_shipping_threshold) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
-                          {/* Stepper */}
-                          <div className="flex items-center rounded-lg bg-card border border-border p-0.5 shadow-xs">
-                            <button
-                              onClick={() => updateQuantity(item.product.id, -1)}
-                              className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary active:scale-90 text-xs transition-transform"
-                            >
-                              <Minus className="h-3.5 w-3.5" />
-                            </button>
-                            <span className="text-xs font-bold w-5 text-center text-foreground tabular-nums">
-                              {item.quantity}
-                            </span>
-                            <button
-                              onClick={() => updateQuantity(item.product.id, 1)}
-                              className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary active:scale-90 text-xs transition-transform"
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+            {/* Cart Items List */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 overscroll-contain">
+              {cart.length === 0 ? (
+                <div className="text-center py-16 space-y-4 animate-in fade-in duration-200">
+                  <div className="h-16 w-16 rounded-full bg-secondary mx-auto flex items-center justify-center text-muted-foreground">
+                    <ShoppingCart className="h-8 w-8 stroke-1" />
+                  </div>
+                  <div>
+                    <h3 className="font-serif text-xl font-bold text-primary">El carrito está vacío</h3>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+                      Agregá deliciosos productos artesanales para comenzar.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsCartOpen(false)}
+                    className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs hover:opacity-90 active:scale-95 transition-all press-feedback"
+                  >
+                    Explorar el catálogo
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    {cart.map((item) => (
+                      <div
+                        key={item.product.id}
+                        className="flex items-center gap-3 p-3 rounded-2xl bg-secondary/40 border border-border transition-all duration-200 hover:border-primary/30"
+                      >
+                        <img
+                          src={
+                            item.product.image_url ||
+                            "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80"
+                          }
+                          alt={item.product.name}
+                          className="h-14 w-14 rounded-xl object-cover shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-xs text-primary truncate">
+                            {item.product.name}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {formatMoney(item.product.price, store.currency_symbol)} c/u
+                          </p>
+                          <p className="text-xs font-bold text-primary mt-0.5">
+                            Subtotal: {formatMoney(item.product.price * item.quantity, store.currency_symbol)}
+                          </p>
+                        </div>
 
+                        {/* Stepper */}
+                        <div className="flex items-center rounded-lg bg-card border border-border p-0.5 shadow-xs">
                           <button
-                            onClick={() => removeFromCart(item.product.id)}
-                            className="p-1.5 text-muted-foreground hover:text-destructive active:scale-90 transition-all"
-                            aria-label="Eliminar producto"
+                            onClick={() => updateQuantity(item.product.id, -1)}
+                            className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary active:scale-90 text-xs transition-transform"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="text-xs font-bold w-5 text-center text-foreground tabular-nums">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateQuantity(item.product.id, 1)}
+                            className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary active:scale-90 text-xs transition-transform"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
                           </button>
                         </div>
-                      ))}
+
+                        <button
+                          onClick={() => removeFromCart(item.product.id)}
+                          className="p-1.5 text-muted-foreground hover:text-destructive active:scale-90 transition-all"
+                          aria-label="Eliminar producto"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Customer Information & Checkout Form */}
+                  <div className="pt-4 border-t border-border space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                      Datos para coordinar el pedido
+                    </p>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                        Tu Nombre y Apellido *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="Ej. Martín Gómez"
+                        className="w-full rounded-xl border border-input bg-card px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-ring transition-shadow"
+                      />
                     </div>
 
-                    {/* Customer Information & Checkout Form */}
-                    <div className="pt-4 border-t border-border space-y-3">
-                      <p className="text-xs font-bold uppercase tracking-wider text-primary">
-                        Datos para coordinar el pedido
-                      </p>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                          Tu Nombre y Apellido *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
-                          placeholder="Ej. Martín Gómez"
-                          className="w-full rounded-xl border border-input bg-card px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-ring transition-shadow"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                          Forma de pago
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setPaymentMethod("transfer")}
-                            className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${
-                              paymentMethod === "transfer"
-                                ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                                : "bg-card border-border text-muted-foreground hover:bg-secondary"
-                            }`}
-                          >
-                            <Landmark className="h-3.5 w-3.5" />
-                            <span>Transferencia</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPaymentMethod("cash")}
-                            className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${
-                              paymentMethod === "cash"
-                                ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                                : "bg-card border-border text-muted-foreground hover:bg-secondary"
-                            }`}
-                          >
-                            <Banknote className="h-3.5 w-3.5" />
-                            <span>Efectivo</span>
-                          </button>
-                        </div>
-                      </div>
-
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+                        Forma de pago
+                      </label>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          onClick={() => setDeliveryMethod("delivery")}
-                          className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${
-                            deliveryMethod === "delivery"
+                          onClick={() => setPaymentMethod("transfer")}
+                          className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${paymentMethod === "transfer"
                               ? "bg-primary text-primary-foreground border-primary shadow-xs"
                               : "bg-card border-border text-muted-foreground hover:bg-secondary"
-                          }`}
+                            }`}
                         >
-                          <Truck className="h-3.5 w-3.5" />
-                          <span>Envío a domicilio</span>
+                          <Landmark className="h-3.5 w-3.5" />
+                          <span>Transferencia</span>
                         </button>
                         <button
                           type="button"
-                          onClick={() => setDeliveryMethod("pickup")}
-                          className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${
-                            deliveryMethod === "pickup"
+                          onClick={() => setPaymentMethod("cash")}
+                          className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${paymentMethod === "cash"
                               ? "bg-primary text-primary-foreground border-primary shadow-xs"
                               : "bg-card border-border text-muted-foreground hover:bg-secondary"
-                          }`}
+                            }`}
                         >
-                          <MapPin className="h-3.5 w-3.5" />
-                          <span>Retiro en local</span>
+                          <Banknote className="h-3.5 w-3.5" />
+                          <span>Efectivo</span>
                         </button>
                       </div>
+                    </div>
 
-                      {deliveryMethod === "delivery" && (
-                        <div className="animate-in fade-in duration-200 space-y-2">
-                          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-accent/25 border border-accent/40 text-[11px] text-accent-foreground font-medium">
-                            <Clock className="h-3.5 w-3.5 shrink-0 text-accent-foreground" />
-                            <span>Delivery disponible únicamente en el <strong>turno mañana (08:00 a 10:00 hs)</strong>.</span>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                              Dirección de Entrega *
-                            </label>
-                            <input
-                              type="text"
-                              value={deliveryAddress}
-                              onChange={(e) => setDeliveryAddress(e.target.value)}
-                              placeholder="Calle, número, piso/depto, barrio"
-                              className="w-full rounded-xl border border-input bg-card px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-ring transition-shadow"
-                            />
-                          </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDeliveryMethod("delivery")}
+                        className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${deliveryMethod === "delivery"
+                            ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                            : "bg-card border-border text-muted-foreground hover:bg-secondary"
+                          }`}
+                      >
+                        <Truck className="h-3.5 w-3.5" />
+                        <span>Envío a domicilio</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeliveryMethod("pickup")}
+                        className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${deliveryMethod === "pickup"
+                            ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                            : "bg-card border-border text-muted-foreground hover:bg-secondary"
+                          }`}
+                      >
+                        <MapPin className="h-3.5 w-3.5" />
+                        <span>Retiro en local</span>
+                      </button>
+                    </div>
+
+                    {deliveryMethod === "delivery" && (
+                      <div className="animate-in fade-in duration-200 space-y-2">
+                        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-accent/25 border border-accent/40 text-[11px] text-accent-foreground font-medium">
+                          <Clock className="h-3.5 w-3.5 shrink-0 text-accent-foreground" />
+                          <span>Delivery disponible únicamente en el <strong>turno mañana (08:00 a 10:00 hs)</strong>.</span>
                         </div>
-                      )}
-
-                      <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                          Notas especiales o aclaraciones
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={orderNotes}
-                          onChange={(e) => setOrderNotes(e.target.value)}
-                          placeholder="Ej. Alérgicos a nueces, dedicatoria de cumpleaños..."
-                          className="w-full rounded-xl border border-input bg-card px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-ring transition-shadow resize-none"
-                        />
+                        <div>
+                          <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                            Dirección de Entrega *
+                          </label>
+                          <input
+                            type="text"
+                            value={deliveryAddress}
+                            onChange={(e) => setDeliveryAddress(e.target.value)}
+                            placeholder="Calle, número, piso/depto, barrio"
+                            className="w-full rounded-xl border border-input bg-card px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-ring transition-shadow"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  </>
-                )}
-              </div>
+                    )}
 
-              {/* Cart Drawer Footer */}
-              {cart.length > 0 && (
-                <div className="p-4 sm:p-5 border-t border-border bg-card space-y-3.5 shadow-lg">
-                  <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Subtotal</span>
-                      <span className="font-semibold text-foreground">
-                        {formatMoney(subtotal, store.currency_symbol)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Entrega</span>
-                      <span className="font-semibold text-foreground">
-                        {deliveryMethod === "pickup"
-                          ? "Gratis (Retiro en local)"
-                          : store.free_shipping_threshold > 0 && subtotal >= store.free_shipping_threshold
-                            ? "Gratis"
-                            : "A coordinar"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-base font-bold text-primary pt-2 border-t border-border">
-                      <span>Total estimado</span>
-                      <span>{formatMoney(subtotal, store.currency_symbol)}</span>
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                        Notas especiales o aclaraciones
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={orderNotes}
+                        onChange={(e) => setOrderNotes(e.target.value)}
+                        placeholder="Ej. Alérgicos a nueces, dedicatoria de cumpleaños..."
+                        className="w-full rounded-xl border border-input bg-card px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-ring transition-shadow resize-none"
+                      />
                     </div>
                   </div>
-
-                  <button
-                    onClick={handleWhatsAppCheckout}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#25D366]/25 transition-all hover:scale-[1.01] active:scale-98 animate-pulse-subtle press-feedback"
-                  >
-                    <MessageCircle className="h-5 w-5 fill-white" />
-                    <span>Confirmar Pedido por WhatsApp</span>
-                  </button>
-
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
-                    <button
-                      onClick={clearCart}
-                      className="hover:text-destructive underline active:scale-95 transition-transform"
-                    >
-                      Vaciar carrito
-                    </button>
-                    <span>Sin pagos por adelantado online</span>
-                  </div>
-                </div>
+                </>
               )}
             </div>
+
+            {/* Cart Drawer Footer */}
+            {cart.length > 0 && (
+              <div className="p-4 sm:p-5 border-t border-border bg-card space-y-3.5 shadow-lg">
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Subtotal</span>
+                    <span className="font-semibold text-foreground">
+                      {formatMoney(subtotal, store.currency_symbol)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Entrega</span>
+                    <span className="font-semibold text-foreground">
+                      {deliveryMethod === "pickup"
+                        ? "Gratis (Retiro en local)"
+                        : store.free_shipping_threshold > 0 && subtotal >= store.free_shipping_threshold
+                          ? "Gratis"
+                          : "A coordinar"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-base font-bold text-primary pt-2 border-t border-border">
+                    <span>Total estimado</span>
+                    <span>{formatMoney(subtotal, store.currency_symbol)}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleWhatsAppCheckout}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#25D366]/25 transition-all hover:scale-[1.01] active:scale-98 animate-pulse-subtle press-feedback"
+                >
+                  <MessageCircle className="h-5 w-5 fill-white" />
+                  <span>Confirmar Pedido por WhatsApp</span>
+                </button>
+
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
+                  <button
+                    onClick={clearCart}
+                    className="hover:text-destructive underline active:scale-95 transition-transform"
+                  >
+                    Vaciar carrito
+                  </button>
+                  <span>Sin pagos por adelantado online</span>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
+      )}
 
       {/* Mobile Floating Action Cart Bar (Acceso Rápido con una mano) */}
       {!isCartOpen && totalItemsCount > 0 && (
