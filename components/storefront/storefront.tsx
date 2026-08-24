@@ -21,6 +21,8 @@ import {
   SlidersHorizontal,
   Settings,
   ChevronRight,
+  Landmark,
+  Banknote,
 } from "lucide-react";
 import type { Store, Category, Product } from "@/lib/types/database";
 import {
@@ -78,14 +80,13 @@ export function Storefront({
 
   // Formulario de Checkout
   const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
   const [deliveryMethod, setDeliveryMethod] = useState<"delivery" | "pickup">(
     "delivery"
   );
   const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<
-    "transfer" | "cash" | "mp"
-  >("transfer");
+  const [paymentMethod, setPaymentMethod] = useState<"transfer" | "cash">(
+    "transfer"
+  );
   const [orderNotes, setOrderNotes] = useState("");
 
   // Detectar scroll para elevación del Header
@@ -305,9 +306,7 @@ export function Storefront({
     const paymentLabel =
       paymentMethod === "transfer"
         ? "Transferencia bancaria"
-        : paymentMethod === "cash"
-          ? "Efectivo al recibir"
-          : "Mercado Pago";
+        : "Efectivo";
 
     const deliveryLabel =
       deliveryMethod === "delivery"
@@ -317,7 +316,6 @@ export function Storefront({
     const message =
       `🧁 *¡Hola ${store.name}! Quiero realizar este pedido:*\n\n` +
       `👤 *Cliente:* ${customerName.trim()}\n` +
-      `📱 *Teléfono:* ${customerPhone.trim() || "No especificado"}\n` +
       `📦 *Entrega:* ${deliveryLabel}\n` +
       `💳 *Pago:* ${paymentLabel}\n` +
       (orderNotes.trim() ? `📝 *Notas:* ${orderNotes.trim()}\n` : "") +
@@ -1149,16 +1147,35 @@ export function Storefront({
                       </div>
 
                       <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                          WhatsApp / Teléfono
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+                          Forma de pago
                         </label>
-                        <input
-                          type="tel"
-                          value={customerPhone}
-                          onChange={(e) => setCustomerPhone(e.target.value)}
-                          placeholder="Ej. 11 2345-6789"
-                          className="w-full rounded-xl border border-input bg-card px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-ring transition-shadow"
-                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPaymentMethod("transfer")}
+                            className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${
+                              paymentMethod === "transfer"
+                                ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                                : "bg-card border-border text-muted-foreground hover:bg-secondary"
+                            }`}
+                          >
+                            <Landmark className="h-3.5 w-3.5" />
+                            <span>Transferencia</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPaymentMethod("cash")}
+                            className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${
+                              paymentMethod === "cash"
+                                ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                                : "bg-card border-border text-muted-foreground hover:bg-secondary"
+                            }`}
+                          >
+                            <Banknote className="h-3.5 w-3.5" />
+                            <span>Efectivo</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
