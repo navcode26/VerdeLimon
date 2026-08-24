@@ -534,7 +534,10 @@ export function Storefront({
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
                 {heroFeaturedProduct && (
-                  <div className="absolute bottom-4 left-4 right-4 p-4 rounded-2xl bg-card/95 backdrop-blur-md border border-border flex items-center justify-between shadow-lg transition-transform duration-300 hover:scale-[1.01]">
+                  <div
+                    onClick={() => setQuickViewProduct(heroFeaturedProduct)}
+                    className="cursor-pointer absolute bottom-4 left-4 right-4 p-4 rounded-2xl bg-card/95 backdrop-blur-md border border-border flex items-center justify-between shadow-lg transition-transform duration-300 hover:scale-[1.01]"
+                  >
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-accent-foreground bg-accent/30 px-2 py-0.5 rounded-full">
                         {heroFeaturedProduct.badge || "Recomendado de hoy"}
@@ -547,7 +550,10 @@ export function Storefront({
                       </p>
                     </div>
                     <button
-                      onClick={() => addToCart(heroFeaturedProduct)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addToCart(heroFeaturedProduct);
+                      }}
                       className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:scale-105 active:scale-90 transition-transform shadow-md shrink-0 ml-2 press-feedback"
                       title="Agregar al pedido"
                     >
@@ -724,7 +730,8 @@ export function Storefront({
                 return (
                   <div
                     key={product.id}
-                    className="group rounded-2xl border border-border bg-card overflow-hidden shadow-xs hover:shadow-xl hover:border-primary/40 transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between press-feedback sm:hover:press-feedback-none"
+                    onClick={() => setQuickViewProduct(product)}
+                    className="group cursor-pointer rounded-2xl border border-border bg-card overflow-hidden shadow-xs hover:shadow-xl hover:border-primary/40 transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between press-feedback sm:hover:press-feedback-none"
                   >
                     <div>
                       {/* Product Image & Badges con Zoom suave */}
@@ -753,7 +760,10 @@ export function Storefront({
 
                         {/* Quick View trigger button */}
                         <button
-                          onClick={() => setQuickViewProduct(product)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setQuickViewProduct(product);
+                          }}
                           className="absolute bottom-3 right-3 px-3 py-1.5 rounded-xl bg-card/95 backdrop-blur-md text-foreground opacity-0 group-hover:opacity-100 hover:bg-card transition-all duration-200 shadow-md text-xs font-semibold translate-y-2 group-hover:translate-y-0 press-feedback"
                           title="Ver detalles"
                         >
@@ -764,10 +774,7 @@ export function Storefront({
                       {/* Product Info */}
                       <div className="p-4 space-y-1.5">
                         <div className="flex items-baseline justify-between gap-2">
-                          <h3
-                            onClick={() => setQuickViewProduct(product)}
-                            className="font-serif text-lg font-bold text-primary group-hover:text-primary/85 transition-colors cursor-pointer line-clamp-1"
-                          >
+                          <h3 className="font-serif text-lg font-bold text-primary group-hover:text-primary/85 transition-colors line-clamp-1">
                             {product.name}
                           </h3>
                         </div>
@@ -797,9 +804,15 @@ export function Storefront({
                       </div>
 
                       {qtyInCart > 0 ? (
-                        <div className="flex items-center rounded-xl bg-secondary border border-border/80 p-1 gap-1.5 shadow-xs animate-in zoom-in-95 duration-150">
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center rounded-xl bg-secondary border border-border/80 p-1 gap-1.5 shadow-xs animate-in zoom-in-95 duration-150"
+                        >
                           <button
-                            onClick={() => updateQuantity(product.id, -1)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateQuantity(product.id, -1);
+                            }}
                             className="h-7 w-7 rounded-lg bg-card text-foreground flex items-center justify-center hover:bg-muted active:scale-90 font-bold text-xs transition-transform shadow-xs"
                             aria-label="Restar una unidad"
                           >
@@ -809,7 +822,10 @@ export function Storefront({
                             {qtyInCart}
                           </span>
                           <button
-                            onClick={() => updateQuantity(product.id, 1)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateQuantity(product.id, 1);
+                            }}
                             className="h-7 w-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center hover:opacity-90 active:scale-90 font-bold text-xs transition-transform shadow-xs"
                             aria-label="Sumar una unidad"
                           >
@@ -818,7 +834,10 @@ export function Storefront({
                         </div>
                       ) : (
                         <button
-                          onClick={() => addToCart(product)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToCart(product);
+                          }}
                           className="flex items-center gap-1.5 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 hover:scale-[1.02] active:scale-95 transition-all press-feedback"
                         >
                           <Plus className="h-3.5 w-3.5 text-accent" />
