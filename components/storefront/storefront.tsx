@@ -1782,7 +1782,17 @@ export function Storefront({
 
           <div className="pt-8 mt-8 border-t border-primary-foreground/10 text-center text-xs text-primary-foreground/60 flex flex-col sm:flex-row items-center justify-between gap-2">
             <p>© {new Date().getFullYear()} {store.name}. Todos los derechos reservados.</p>
-            <p className="text-[11px]">Hecho con pasión por el buen pan y los dulces.</p>
+            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 text-[11px] text-primary-foreground/50">
+              <span>Hecho con pasión por el buen pan y los dulces.</span>
+              <span className="opacity-30">·</span>
+              <a
+                href="mailto:navcode26@gmail.com"
+                className="text-[10px] tracking-wider text-primary-foreground/40 hover:text-primary-foreground/90 transition-colors underline-offset-2 hover:underline cursor-pointer"
+                title="Contactar con NavCode"
+              >
+                Desarrollado por <span className="font-medium text-primary-foreground/50 hover:text-primary-foreground">NavCode</span>
+              </a>
+            </div>
           </div>
         </div>
       </footer>
