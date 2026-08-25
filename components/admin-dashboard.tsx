@@ -31,12 +31,7 @@ import type {
   Store,
   ProductDraft,
 } from "@/lib/types/database";
-import {
-  formatMoney,
-  FALLBACK_STORE,
-  FALLBACK_CATEGORIES,
-  FALLBACK_PRODUCTS,
-} from "@/lib/products-data";
+import { formatMoney } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import {
   getStoreBySlug,
@@ -66,7 +61,7 @@ function Sidebar({
   onSelectSection: (section: AdminSection) => void;
   open: boolean;
   onClose: () => void;
-  store: Store;
+  store: Store | null;
   onLogout: () => void;
 }) {
   const navItems: { id: AdminSection; label: string; icon: typeof Package }[] = [
@@ -82,12 +77,12 @@ function Sidebar({
         onClick={onClose}
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-primary px-4 py-5 text-primary-foreground transition-transform lg:static lg:translate-x-0 ${open ? "translate-x-0" : "hidden"
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-primary px-4 py-5 text-primary-foreground transition-transform lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:translate-x-0 ${open ? "translate-x-0" : "hidden"
           } lg:flex`}
       >
         <div className="mb-10 flex items-center justify-between px-3">
           <div className="flex items-center gap-3">
-            {store.logo_url ? (
+            {store?.logo_url ? (
               <img
                 src={store.logo_url}
                 alt={store.name}
@@ -95,13 +90,13 @@ function Sidebar({
               />
             ) : (
               <div className="h-10 w-10 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold font-serif text-sm">
-                {store.name.substring(0, 2).toUpperCase()}
+                {store?.name ? store.name.substring(0, 2).toUpperCase() : "VL"}
               </div>
             )}
             <div>
-              <p className="font-serif text-lg leading-none">{store.name}</p>
+              <p className="font-serif text-lg leading-none">{store?.name || "Panel Admin"}</p>
               <p className="mt-1 text-[9px] uppercase tracking-[.18em] text-primary-foreground/60">
-                {store.tagline || "Panel Admin"}
+                {store?.tagline || "Verde Limón"}
               </p>
             </div>
           </div>
@@ -164,7 +159,7 @@ function Sidebar({
             <div className="min-w-0">
               <p className="truncate text-xs font-semibold">Administrador</p>
               <p className="truncate text-[10px] text-primary-foreground/50">
-                {store.name}
+                {store?.name || "Verde Limón"}
               </p>
             </div>
           </div>
@@ -180,12 +175,14 @@ function ProductModal({
   onClose,
   onSave,
   isSaving,
+  currencySymbol = "$",
 }: {
   product: Product | null;
   categories: Category[];
   onClose: () => void;
   onSave: (draft: ProductDraft) => void;
   isSaving: boolean;
+  currencySymbol?: string;
 }) {
   const [draft, setDraft] = useState<ProductDraft>(
     product
@@ -218,6 +215,9 @@ function ProductModal({
     value: string | number | boolean | null
   ) => setDraft((current) => ({ ...current, [key]: value }));
 
+  const selectedCatName =
+    categories.find((c) => c.id === draft.category_id)?.name || "General";
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/45 p-4 animate-in fade-in"
@@ -225,197 +225,353 @@ function ProductModal({
       aria-modal="true"
       aria-labelledby="modal-title"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-card shadow-2xl border border-border overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border p-5">
+      <div className="w-full max-w-3xl rounded-3xl bg-card shadow-2xl border border-border overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between border-b border-border p-5 bg-secondary/20 shrink-0">
           <div>
             <h2 id="modal-title" className="font-serif text-2xl text-primary">
               {product ? "Editar producto" : "Nuevo producto"}
             </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Completá los datos del catálogo en Supabase.
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Completá los datos y previsualizá cómo se verá en el catálogo online.
             </p>
           </div>
           <button
             onClick={onClose}
             aria-label="Cerrar modal"
-            className="rounded-full p-2 text-muted-foreground hover:bg-secondary"
+            className="rounded-full p-2 text-muted-foreground hover:bg-secondary active:scale-90 transition-transform"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
-        <form
-          className="space-y-4 p-5 max-h-[80vh] overflow-y-auto"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (draft.name.trim() && draft.price > 0) {
-              onSave({ ...draft, name: draft.name.trim() });
-            }
-          }}
-        >
-          <div>
-            <label
-              htmlFor="product-name"
-              className="mb-1.5 block text-xs font-semibold text-primary"
-            >
-              Nombre del producto *
-            </label>
-            <input
-              id="product-name"
-              required
-              value={draft.name}
-              onChange={(e) => update("name", e.target.value)}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Ej. Docena de medialunas"
-            />
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
+        {/* Modal Body: Form + Live Preview */}
+        <div className="grid grid-cols-1 md:grid-cols-12 overflow-y-auto flex-1 divide-y md:divide-y-0 md:divide-x divide-border">
+          {/* Form Side */}
+          <form
+            id="product-form"
+            className="p-5 md:col-span-7 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (draft.name.trim() && draft.price > 0) {
+                onSave({ ...draft, name: draft.name.trim() });
+              }
+            }}
+          >
             <div>
               <label
-                htmlFor="product-price"
+                htmlFor="product-name"
                 className="mb-1.5 block text-xs font-semibold text-primary"
               >
-                Precio *
+                Nombre del producto *
               </label>
               <input
-                id="product-price"
+                id="product-name"
                 required
-                min="1"
-                type="number"
-                value={draft.price || ""}
-                onChange={(e) => update("price", Number(e.target.value))}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                value={draft.name}
+                onChange={(e) => update("name", e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Ej. Docena de medialunas"
               />
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label
+                  htmlFor="product-price"
+                  className="mb-1.5 block text-xs font-semibold text-primary"
+                >
+                  Precio *
+                </label>
+                <input
+                  id="product-price"
+                  required
+                  min="1"
+                  type="number"
+                  value={draft.price || ""}
+                  onChange={(e) => update("price", Number(e.target.value))}
+                  className="w-full rounded-xl border border-input bg-background px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="product-category"
+                  className="mb-1.5 block text-xs font-semibold text-primary"
+                >
+                  Categoría
+                </label>
+                <select
+                  id="product-category"
+                  value={draft.category_id || ""}
+                  onChange={(e) => update("category_id", e.target.value)}
+                  className="w-full rounded-xl border border-input bg-background px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-ring text-foreground"
+                >
+                  <option value="">Sin categoría asignada</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div>
               <label
-                htmlFor="product-category"
+                htmlFor="product-description"
                 className="mb-1.5 block text-xs font-semibold text-primary"
               >
-                Categoría
+                Descripción
               </label>
-              <select
-                id="product-category"
-                value={draft.category_id || ""}
-                onChange={(e) => update("category_id", e.target.value)}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring text-foreground"
+              <textarea
+                id="product-description"
+                rows={2}
+                value={draft.description || ""}
+                onChange={(e) => update("description", e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-ring resize-none"
+                placeholder="Detalles sobre ingredientes, elaboración..."
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label
+                  htmlFor="product-badge"
+                  className="mb-1.5 block text-xs font-semibold text-primary"
+                >
+                  Etiqueta / Badge
+                </label>
+                <input
+                  id="product-badge"
+                  value={draft.badge || ""}
+                  onChange={(e) => update("badge", e.target.value)}
+                  className="w-full rounded-xl border border-input bg-background px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Ej. Más Vendido, Destacado"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="product-unit"
+                  className="mb-1.5 block text-xs font-semibold text-primary"
+                >
+                  Presentación
+                </label>
+                <input
+                  id="product-unit"
+                  value={draft.unit || ""}
+                  onChange={(e) => update("unit", e.target.value)}
+                  className="w-full rounded-xl border border-input bg-background px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Ej. 12 unidades, 850g"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="product-image"
+                className="mb-1.5 block text-xs font-semibold text-primary"
               >
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+                URL de Imagen
+              </label>
+              <input
+                id="product-image"
+                value={draft.image_url || ""}
+                onChange={(e) => update("image_url", e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                placeholder="https://..."
+              />
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 border-t border-border">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={draft.active}
+                  onChange={(e) => update("active", e.target.checked)}
+                  className="rounded border-input text-primary focus:ring-ring h-4 w-4"
+                />
+                <span className="text-xs font-semibold text-primary">
+                  Producto activo y disponible para compra
+                </span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={draft.is_featured}
+                  onChange={(e) => update("is_featured", e.target.checked)}
+                  className="rounded border-input text-primary focus:ring-ring h-4 w-4"
+                />
+                <span className="text-xs font-semibold text-primary">
+                  Destacar en el carrusel principal del inicio
+                </span>
+              </label>
+            </div>
+          </form>
+
+          {/* Live Preview Side */}
+          <div className="p-5 md:col-span-5 bg-secondary/30 flex flex-col justify-center items-center">
+            <div className="w-full max-w-[280px] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Vista Previa en Tienda
+                </p>
+                {draft.is_featured && (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-accent-foreground bg-accent/30 px-2 py-0.5 rounded-full">
+                    <Sparkles className="h-2.5 w-2.5" />
+                    Destacado
+                  </span>
+                )}
+              </div>
+
+              {/* Rendered Product Card */}
+              <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-md flex flex-col justify-between">
+                <div>
+                  <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
+                    <img
+                      src={draft.image_url || "/logo-verde-limon.png"}
+                      alt={draft.name || "Producto"}
+                      onError={(e) => {
+                        e.currentTarget.src = "/logo-verde-limon.png";
+                      }}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 items-start">
+                      {draft.badge && (
+                        <span className="px-2 py-0.5 rounded-full bg-accent text-accent-foreground text-[9px] font-bold uppercase tracking-wider shadow-sm">
+                          {draft.badge}
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 rounded-full bg-card/90 text-foreground text-[9px] font-semibold shadow-xs">
+                        {selectedCatName}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 space-y-1">
+                    <h4 className="font-serif text-base font-bold text-primary truncate">
+                      {draft.name || "Nombre del producto"}
+                    </h4>
+                    <p className="text-[11px] text-muted-foreground line-clamp-2 min-h-[28px]">
+                      {draft.description || "Descripción del producto..."}
+                    </p>
+                    {draft.unit && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Presentación:{" "}
+                        <span className="font-semibold text-foreground">{draft.unit}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-3.5 pt-0 mt-1 border-t border-border/40 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
+                      Precio
+                    </p>
+                    <p className="text-base font-bold text-primary">
+                      {formatMoney(draft.price || 0, currencySymbol)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1.5 rounded-xl text-[11px] font-bold shadow-xs">
+                    <Plus className="h-3 w-3 text-accent" />
+                    <span>Agregar</span>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-center text-muted-foreground italic">
+                {draft.active ? "● Visible para los clientes" : "○ Pausado en el catálogo"}
+              </p>
             </div>
           </div>
+        </div>
 
+        {/* Modal Footer */}
+        <div className="flex justify-end gap-2 p-4 border-t border-border bg-card shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl px-4 py-2.5 text-xs font-semibold text-muted-foreground hover:bg-secondary transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="product-form"
+            disabled={isSaving}
+            className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-xs font-bold text-primary-foreground shadow-md hover:opacity-90 disabled:opacity-50 transition-opacity"
+          >
+            {isSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            <span>{isSaving ? "Guardando..." : "Guardar producto"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel = "Eliminar",
+  cancelLabel = "Cancelar",
+  isDanger = true,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  isDanger?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/45 p-4 animate-in fade-in"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="w-full max-w-md rounded-3xl bg-card p-6 shadow-2xl border border-border space-y-4 animate-in zoom-in-95 duration-150">
+        <div className="flex items-center gap-3.5">
+          <div className="h-11 w-11 rounded-2xl bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
+            <Trash2 className="h-5 w-5" />
+          </div>
           <div>
-            <label
-              htmlFor="product-description"
-              className="mb-1.5 block text-xs font-semibold text-primary"
-            >
-              Descripción
-            </label>
-            <textarea
-              id="product-description"
-              rows={2}
-              value={draft.description || ""}
-              onChange={(e) => update("description", e.target.value)}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Detalles sobre ingredientes, elaboración..."
-            />
+            <h3 className="font-serif text-lg font-bold text-primary">
+              {title}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+              {description}
+            </p>
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label
-                htmlFor="product-badge"
-                className="mb-1.5 block text-xs font-semibold text-primary"
-              >
-                Etiqueta / Badge (Opcional)
-              </label>
-              <input
-                id="product-badge"
-                value={draft.badge || ""}
-                onChange={(e) => update("badge", e.target.value)}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Ej. Más Vendido, Destacado"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="product-unit"
-                className="mb-1.5 block text-xs font-semibold text-primary"
-              >
-                Presentación / Porción
-              </label>
-              <input
-                id="product-unit"
-                value={draft.unit || ""}
-                onChange={(e) => update("unit", e.target.value)}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Ej. 12 unidades, 8 porciones"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label
-              htmlFor="product-image"
-              className="mb-1.5 block text-xs font-semibold text-primary"
-            >
-              URL de imagen
-            </label>
-            <input
-              id="product-image"
-              value={draft.image_url || ""}
-              onChange={(e) => update("image_url", e.target.value)}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-              placeholder="https://..."
-            />
-          </div>
-
-          <div className="space-y-2 pt-1">
-            <label className="flex cursor-pointer items-center gap-3 rounded-lg bg-secondary p-3 text-sm font-medium text-primary">
-              <input
-                type="checkbox"
-                checked={draft.active}
-                onChange={(e) => update("active", e.target.checked)}
-                className="h-4 w-4 accent-primary"
-              />
-              Producto visible en la tienda (Activo)
-            </label>
-
-            <label className="flex cursor-pointer items-center gap-3 rounded-lg bg-secondary p-3 text-sm font-medium text-primary">
-              <input
-                type="checkbox"
-                checked={draft.is_featured}
-                onChange={(e) => update("is_featured", e.target.checked)}
-                className="h-4 w-4 accent-primary"
-              />
-              Destacar en la portada principal
-            </label>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t border-border">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSaving}
-              className="rounded-lg px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:bg-secondary disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
-            >
-              {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-              <span>{isSaving ? "Guardando..." : "Guardar producto"}</span>
-            </button>
-          </div>
-        </form>
+        <div className="flex justify-end gap-2 pt-3 border-t border-border">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary transition-colors"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`rounded-xl px-5 py-2 text-xs font-bold text-white shadow-sm transition-all ${
+              isDanger
+                ? "bg-destructive hover:bg-destructive/90 shadow-destructive/20"
+                : "bg-primary hover:bg-primary/90"
+            }`}
+          >
+            {confirmLabel}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -424,17 +580,31 @@ function ProductModal({
 export function AdminDashboard() {
   const router = useRouter();
   const [currentSection, setCurrentSection] = useState<AdminSection>("products");
-  const [store, setStore] = useState<Store>(FALLBACK_STORE);
-  const [categories, setCategories] = useState<Category[]>(FALLBACK_CATEGORIES);
-  const [products, setProducts] = useState<Product[]>(FALLBACK_PRODUCTS);
+  const [store, setStore] = useState<Store | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   // Filtros y modal de Productos
   const [query, setQuery] = useState("");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused" | "featured">("all");
   const [modal, setModal] = useState<Product | null | undefined>(undefined);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Modal de confirmación estilizado
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => void;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    onConfirm: () => {},
+  });
 
   // Estado para gestión de Categorías
   const [newCatName, setNewCatName] = useState("");
@@ -498,12 +668,11 @@ export function AdminDashboard() {
           getAllProductsAdmin(storeRes.data.id),
         ]);
 
-        if (catRes.data && catRes.data.length > 0) {
-          setCategories(catRes.data);
-        }
-        if (prodRes.data && prodRes.data.length > 0) {
-          setProducts(prodRes.data);
-        }
+        setCategories(catRes.data || []);
+        setProducts(prodRes.data || []);
+      } else {
+        setCategories([]);
+        setProducts([]);
       }
     } catch (e) {
       console.error("Error al cargar dashboard:", e);
@@ -530,12 +699,26 @@ export function AdminDashboard() {
       const matchesCategory =
         selectedCategoryFilter === "all" ||
         product.category_id === selectedCategoryFilter;
-      return matchesQuery && matchesCategory;
+      const matchesStatus =
+        statusFilter === "all"
+          ? true
+          : statusFilter === "active"
+          ? product.active
+          : statusFilter === "paused"
+          ? !product.active
+          : statusFilter === "featured"
+          ? product.is_featured
+          : true;
+      return matchesQuery && matchesCategory && matchesStatus;
     });
-  }, [products, query, selectedCategoryFilter]);
+  }, [products, query, selectedCategoryFilter, statusFilter]);
 
   // Manejadores de Productos
   const handleSaveProduct = async (draft: ProductDraft) => {
+    if (!store) {
+      alert("No se puede guardar: la tienda no está cargada.");
+      return;
+    }
     try {
       setIsSaving(true);
       if (modal) {
@@ -545,46 +728,14 @@ export function AdminDashboard() {
             current.map((item) => (item.id === modal.id ? res.data! : item))
           );
         } else {
-          setProducts((current) =>
-            current.map((item) =>
-              item.id === modal.id
-                ? {
-                  ...item,
-                  ...draft,
-                  description: draft.description || null,
-                  badge: draft.badge || null,
-                  unit: draft.unit || null,
-                  image_url: draft.image_url || null,
-                  category_id: draft.category_id || null,
-                  is_featured: draft.is_featured || false,
-                  updated_at: new Date().toISOString(),
-                }
-                : item
-            )
-          );
+          alert(`Error al actualizar el producto: ${res.error || "Desconocido"}`);
         }
       } else {
         const res = await createProduct(store.id, draft);
         if (res.data) {
           setProducts((current) => [res.data!, ...current]);
         } else {
-          const newProd: Product = {
-            id: `prod-${Date.now()}`,
-            store_id: store.id,
-            name: draft.name,
-            description: draft.description || null,
-            price: draft.price,
-            category_id: draft.category_id || null,
-            image_url: draft.image_url || null,
-            badge: draft.badge || null,
-            unit: draft.unit || null,
-            active: draft.active,
-            is_featured: draft.is_featured || false,
-            display_order: products.length + 1,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-          setProducts((current) => [newProd, ...current]);
+          alert(`Error al crear el producto: ${res.error || "Desconocido"}`);
         }
       }
       setModal(undefined);
@@ -605,34 +756,32 @@ export function AdminDashboard() {
     await toggleProductActive(id, nextState);
   };
 
-  const handleRemoveProduct = async (id: string, name: string) => {
-    if (!confirm(`¿Estás seguro de eliminar "${name}" del catálogo?`)) return;
-    setProducts((current) => current.filter((item) => item.id !== id));
-    await deleteProduct(id);
+  const handleRemoveProduct = (id: string, name: string) => {
+    setConfirmDialog({
+      open: true,
+      title: "Eliminar producto",
+      description: `¿Estás seguro de que querés eliminar "${name}" del catálogo? Esta acción no se puede deshacer.`,
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, open: false }));
+        setProducts((current) => current.filter((item) => item.id !== id));
+        await deleteProduct(id);
+      },
+    });
   };
 
   // Manejadores de Categorías
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCatName.trim()) return;
+    if (!store || !newCatName.trim()) return;
     try {
       setIsCatProcessing(true);
       const res = await createCategory(store.id, newCatName.trim());
       if (res.data) {
         setCategories((prev) => [...prev, res.data!]);
+        setNewCatName("");
       } else {
-        const fallbackCat: Category = {
-          id: `cat-${Date.now()}`,
-          store_id: store.id,
-          name: newCatName.trim(),
-          slug: newCatName.toLowerCase().replace(/\s+/g, "-"),
-          display_order: categories.length,
-          active: true,
-          created_at: new Date().toISOString(),
-        };
-        setCategories((prev) => [...prev, fallbackCat]);
+        alert(`Error al crear categoría: ${res.error || "Desconocido"}`);
       }
-      setNewCatName("");
     } catch (e) {
       console.error("Error al crear categoría:", e);
     } finally {
@@ -650,11 +799,7 @@ export function AdminDashboard() {
           prev.map((c) => (c.id === id ? res.data! : c))
         );
       } else {
-        setCategories((prev) =>
-          prev.map((c) =>
-            c.id === id ? { ...c, name: editingCatName.trim() } : c
-          )
-        );
+        alert(`Error al actualizar categoría: ${res.error || "Desconocido"}`);
       }
       setEditingCatId(null);
       setEditingCatName("");
@@ -665,42 +810,52 @@ export function AdminDashboard() {
     }
   };
 
-  const handleDeleteCategory = async (id: string, name: string) => {
+  const handleDeleteCategory = (id: string, name: string) => {
     const prodsInCat = products.filter((p) => p.category_id === id);
-    const msg =
+    const description =
       prodsInCat.length > 0
-        ? `La categoría "${name}" tiene ${prodsInCat.length} producto(s). Si la eliminás, quedarán sin categoría asignada. ¿Deseás continuar?`
-        : `¿Estás seguro de eliminar la categoría "${name}"?`;
+        ? `La categoría "${name}" tiene ${prodsInCat.length} producto(s). Si la eliminás, esos productos quedarán como "Sin categoría". ¿Deseás continuar?`
+        : `¿Estás seguro de que querés eliminar la categoría "${name}"?`;
 
-    if (!confirm(msg)) return;
-
-    try {
-      setIsCatProcessing(true);
-      await deleteCategory(id);
-      setCategories((prev) => prev.filter((c) => c.id !== id));
-      // Desasociar productos localmente
-      setProducts((prev) =>
-        prev.map((p) => (p.category_id === id ? { ...p, category_id: null } : p))
-      );
-    } catch (e) {
-      console.error("Error al eliminar categoría:", e);
-    } finally {
-      setIsCatProcessing(false);
-    }
+    setConfirmDialog({
+      open: true,
+      title: "Eliminar categoría",
+      description,
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, open: false }));
+        try {
+          setIsCatProcessing(true);
+          await deleteCategory(id);
+          setCategories((prev) => prev.filter((c) => c.id !== id));
+          setProducts((prev) =>
+            prev.map((p) =>
+              p.category_id === id ? { ...p, category_id: null } : p
+            )
+          );
+        } catch (e) {
+          console.error("Error al eliminar categoría:", e);
+        } finally {
+          setIsCatProcessing(false);
+        }
+      },
+    });
   };
 
   // Manejador de Configuración de Tienda
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!store) return;
     try {
       setIsSavingSettings(true);
       setSettingsSavedSuccess(false);
       const res = await updateStoreSettings(store.id, settingsForm);
       if (res.data) {
         setStore(res.data);
+        setSettingsSavedSuccess(true);
+        setTimeout(() => setSettingsSavedSuccess(false), 4000);
+      } else {
+        alert(`Error al guardar configuración: ${res.error || "Desconocido"}`);
       }
-      setSettingsSavedSuccess(true);
-      setTimeout(() => setSettingsSavedSuccess(false), 4000);
     } catch (e) {
       console.error("Error al guardar configuración:", e);
     } finally {
@@ -784,32 +939,63 @@ export function AdminDashboard() {
                 </button>
               </div>
 
-              {/* Metrics Cards */}
+              {/* Metrics Cards Interactivas como Filtros Rápidos */}
               <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-                  <p className="text-xs text-muted-foreground">Total productos</p>
+                <button
+                  onClick={() => setStatusFilter("all")}
+                  className={`rounded-xl border p-4 shadow-xs text-left transition-all ${
+                    statusFilter === "all"
+                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                      : "border-border bg-card hover:bg-secondary/40"
+                  }`}
+                >
+                  <p className="text-xs text-muted-foreground font-medium">Total productos</p>
                   <p className="mt-2 text-2xl font-bold text-primary">
                     {products.length}
                   </p>
-                </div>
-                <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-                  <p className="text-xs text-muted-foreground">Activos</p>
+                </button>
+
+                <button
+                  onClick={() => setStatusFilter("active")}
+                  className={`rounded-xl border p-4 shadow-xs text-left transition-all ${
+                    statusFilter === "active"
+                      ? "border-accent-foreground bg-accent/20 ring-2 ring-accent"
+                      : "border-border bg-card hover:bg-secondary/40"
+                  }`}
+                >
+                  <p className="text-xs text-muted-foreground font-medium">Activos en tienda</p>
                   <p className="mt-2 text-2xl font-bold text-primary">
                     {products.filter((p) => p.active).length}
                   </p>
-                </div>
-                <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-                  <p className="text-xs text-muted-foreground">Pausados</p>
+                </button>
+
+                <button
+                  onClick={() => setStatusFilter("paused")}
+                  className={`rounded-xl border p-4 shadow-xs text-left transition-all ${
+                    statusFilter === "paused"
+                      ? "border-destructive bg-destructive/10 ring-2 ring-destructive/30"
+                      : "border-border bg-card hover:bg-secondary/40"
+                  }`}
+                >
+                  <p className="text-xs text-muted-foreground font-medium">Pausados</p>
                   <p className="mt-2 text-2xl font-bold text-primary">
                     {products.filter((p) => !p.active).length}
                   </p>
-                </div>
-                <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-                  <p className="text-xs text-muted-foreground">Categorías</p>
+                </button>
+
+                <button
+                  onClick={() => setStatusFilter("featured")}
+                  className={`rounded-xl border p-4 shadow-xs text-left transition-all ${
+                    statusFilter === "featured"
+                      ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30"
+                      : "border-border bg-card hover:bg-secondary/40"
+                  }`}
+                >
+                  <p className="text-xs text-muted-foreground font-medium">Destacados</p>
                   <p className="mt-2 text-2xl font-bold text-primary">
-                    {categories.length}
+                    {products.filter((p) => p.is_featured).length}
                   </p>
-                </div>
+                </button>
               </div>
 
               {/* Products Table Container */}
@@ -825,21 +1011,34 @@ export function AdminDashboard() {
                     />
                   </div>
 
-                  {/* Selector de Categorías */}
-                  <div className="flex items-center gap-2">
-                    <Grid2X2 className="h-4 w-4 text-muted-foreground hidden sm:inline" />
+                  {/* Selectores de Estado y Categorías */}
+                  <div className="flex flex-wrap items-center gap-2">
                     <select
-                      value={selectedCategoryFilter}
-                      onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-                      className="rounded-lg border border-input bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value as any)}
+                      className="rounded-lg border border-input bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
                     >
-                      <option value="all">Todas las categorías</option>
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </option>
-                      ))}
+                      <option value="all">Todos los estados</option>
+                      <option value="active">Solo Activos</option>
+                      <option value="paused">Solo Pausados</option>
+                      <option value="featured">Solo Destacados</option>
                     </select>
+
+                    <div className="flex items-center gap-2">
+                      <Grid2X2 className="h-4 w-4 text-muted-foreground hidden sm:inline" />
+                      <select
+                        value={selectedCategoryFilter}
+                        onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                        className="rounded-lg border border-input bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                      >
+                        <option value="all">Todas las categorías</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -874,9 +1073,12 @@ export function AdminDashboard() {
                                     <img
                                       src={
                                         product.image_url ||
-                                        "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=160&q=80"
+                                        "/logo-verde-limon.png"
                                       }
-                                      alt=""
+                                      alt={product.name}
+                                      onError={(e) => {
+                                        e.currentTarget.src = "/logo-verde-limon.png";
+                                      }}
                                       className="h-11 w-11 rounded-lg object-cover bg-secondary"
                                     />
                                     <div>
@@ -895,7 +1097,7 @@ export function AdminDashboard() {
                                   {catName}
                                 </td>
                                 <td className="px-5 py-3 font-semibold text-primary">
-                                  {formatMoney(product.price, store.currency_symbol)}
+                                  {formatMoney(product.price, store?.currency_symbol || "$")}
                                 </td>
                                 <td className="px-5 py-3">
                                   <button
@@ -944,9 +1146,12 @@ export function AdminDashboard() {
                           <img
                             src={
                               product.image_url ||
-                              "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=160&q=80"
+                              "/logo-verde-limon.png"
                             }
-                            alt=""
+                            alt={product.name}
+                            onError={(e) => {
+                              e.currentTarget.src = "/logo-verde-limon.png";
+                            }}
                             className="h-14 w-14 rounded-lg object-cover bg-secondary"
                           />
                           <div className="min-w-0 flex-1">
@@ -957,7 +1162,7 @@ export function AdminDashboard() {
                               {product.category_id
                                 ? categoryMap.get(product.category_id) || "General"
                                 : "General"}{" "}
-                              · {formatMoney(product.price, store.currency_symbol)}
+                              · {formatMoney(product.price, store?.currency_symbol || "$")}
                             </p>
                             <button
                               onClick={() =>
@@ -1427,8 +1632,18 @@ export function AdminDashboard() {
           onClose={() => setModal(undefined)}
           onSave={handleSaveProduct}
           isSaving={isSaving}
+          currencySymbol={store?.currency_symbol || "$"}
         />
       )}
+
+      {/* Modal de Confirmación Estilizado */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog((prev) => ({ ...prev, open: false }))}
+      />
     </div>
   );
 }

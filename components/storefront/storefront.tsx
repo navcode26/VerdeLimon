@@ -24,14 +24,10 @@ import {
   ChevronRight,
   Landmark,
   Banknote,
+  Copy,
 } from "lucide-react";
 import type { Store, Category, Product } from "@/lib/types/database";
-import {
-  formatMoney,
-  FALLBACK_STORE,
-  FALLBACK_CATEGORIES,
-  FALLBACK_PRODUCTS,
-} from "@/lib/products-data";
+import { formatMoney, normalizeWhatsAppNumber } from "@/lib/utils";
 import {
   getStoreBySlug,
   getCategoriesByStore,
@@ -42,6 +38,8 @@ type CartItem = {
   product: Product;
   quantity: number;
 };
+
+const DEFAULT_PRODUCT_IMAGE = "/logo-verde-limon.png";
 
 interface StorefrontProps {
   initialStore?: Store | null;
@@ -54,16 +52,12 @@ export function Storefront({
   initialCategories,
   initialProducts,
 }: StorefrontProps) {
-  const [store, setStore] = useState<Store>(initialStore || FALLBACK_STORE);
+  const [store, setStore] = useState<Store | null>(initialStore || null);
   const [categories, setCategories] = useState<Category[]>(
-    initialCategories && initialCategories.length > 0
-      ? initialCategories
-      : FALLBACK_CATEGORIES
+    initialCategories || []
   );
   const [products, setProducts] = useState<Product[]>(
-    initialProducts && initialProducts.length > 0
-      ? initialProducts
-      : FALLBACK_PRODUCTS
+    initialProducts || []
   );
   const [isLoading, setIsLoading] = useState<boolean>(!initialStore);
 
@@ -89,6 +83,10 @@ export function Storefront({
     "transfer"
   );
   const [orderNotes, setOrderNotes] = useState("");
+  const [validationErrors, setValidationErrors] = useState<{
+    name?: string;
+    address?: string;
+  }>({});
 
   // Detectar scroll para elevación del Header
   useEffect(() => {
@@ -116,12 +114,8 @@ export function Storefront({
             getActiveProductsByStore(storeRes.data.id),
           ]);
 
-          if (catRes.data && catRes.data.length > 0) {
-            setCategories(catRes.data);
-          }
-          if (prodRes.data && prodRes.data.length > 0) {
-            setProducts(prodRes.data);
-          }
+          setCategories(catRes.data || []);
+          setProducts(prodRes.data || []);
         }
       } catch (e) {
         console.error("Error al cargar datos de la tienda:", e);
@@ -135,8 +129,9 @@ export function Storefront({
 
   // Cargar carrito desde localStorage si existe
   useEffect(() => {
+    if (!store?.slug) return;
     try {
-      const storageKey = `store_cart_${store.slug || "default"}`;
+      const storageKey = `store_cart_${store.slug}`;
       const savedCart = localStorage.getItem(storageKey);
       if (savedCart) {
         setCart(JSON.parse(savedCart));
@@ -144,17 +139,53 @@ export function Storefront({
     } catch {
       // Ignorar error de storage
     }
-  }, [store.slug]);
+  }, [store?.slug]);
 
   // Guardar carrito al cambiar
   useEffect(() => {
+    if (!store?.slug) return;
     try {
-      const storageKey = `store_cart_${store.slug || "default"}`;
+      const storageKey = `store_cart_${store.slug}`;
       localStorage.setItem(storageKey, JSON.stringify(cart));
     } catch {
       // Ignorar error de storage
     }
-  }, [cart, store.slug]);
+  }, [cart, store?.slug]);
+
+  // Cargar información del cliente desde localStorage si existe
+  useEffect(() => {
+    if (!store?.slug) return;
+    try {
+      const customerKey = `store_customer_${store.slug}`;
+      const savedInfo = localStorage.getItem(customerKey);
+      if (savedInfo) {
+        const parsed = JSON.parse(savedInfo);
+        if (parsed.customerName) setCustomerName(parsed.customerName);
+        if (parsed.deliveryAddress) setDeliveryAddress(parsed.deliveryAddress);
+        if (parsed.deliveryMethod) setDeliveryMethod(parsed.deliveryMethod);
+        if (parsed.paymentMethod) setPaymentMethod(parsed.paymentMethod);
+      }
+    } catch {
+      // Ignorar error de storage
+    }
+  }, [store?.slug]);
+
+  // Guardar información del cliente al cambiar
+  useEffect(() => {
+    if (!store?.slug) return;
+    try {
+      const customerKey = `store_customer_${store.slug}`;
+      const infoToSave = {
+        customerName,
+        deliveryAddress,
+        deliveryMethod,
+        paymentMethod,
+      };
+      localStorage.setItem(customerKey, JSON.stringify(infoToSave));
+    } catch {
+      // Ignorar error de storage
+    }
+  }, [customerName, deliveryAddress, deliveryMethod, paymentMethod, store?.slug]);
 
   // Cálculos de totales dinámicos
   const totalItemsCount = useMemo(
@@ -317,26 +348,16 @@ export function Storefront({
     setFeaturedIndex((prev) => (prev - 1 + featuredProducts.length) % featuredProducts.length);
   };
 
-  // Generar link de pedido por WhatsApp 100% dinámico
-  const handleWhatsAppCheckout = () => {
-    if (cart.length === 0) return;
-
-    if (!customerName.trim()) {
-      alert("Por favor ingresá tu nombre para preparar el pedido.");
-      return;
-    }
-
-    if (deliveryMethod === "delivery" && !deliveryAddress.trim()) {
-      alert("Por favor ingresá tu dirección para el envío.");
-      return;
-    }
+  // Construir mensaje estructurado del pedido
+  const buildOrderMessage = () => {
+    if (!store) return "";
 
     const itemsText = cart
       .map(
         (item, index) =>
           `${index + 1}. *${item.product.name}* x ${item.quantity} = ${formatMoney(
             item.product.price * item.quantity,
-            store.currency_symbol
+            store.currency_symbol || "$"
           )}`
       )
       .join("\n");
@@ -348,35 +369,133 @@ export function Storefront({
 
     const deliveryLabel =
       deliveryMethod === "delivery"
-        ? `Envío a domicilio (Turno Mañana 08 a 10hs) - ${deliveryAddress}`
+        ? `Envío a domicilio - ${deliveryAddress}`
         : "Retiro por el local";
 
-    const message =
+    return (
       `🧁 *¡Hola ${store.name}! Quiero realizar este pedido:*\n\n` +
       `👤 *Cliente:* ${customerName.trim()}\n` +
       `📦 *Entrega:* ${deliveryLabel}\n` +
       `💳 *Pago:* ${paymentLabel}\n` +
       (orderNotes.trim() ? `📝 *Notas:* ${orderNotes.trim()}\n` : "") +
       `\n🛒 *Detalle de productos:*\n${itemsText}\n\n` +
-      `💰 *TOTAL ESTIMADO: ${formatMoney(subtotal, store.currency_symbol)}*\n\n` +
-      `_¡Aguardamos su confirmación para coordinar el horario! Gracias._`;
+      `💰 *TOTAL ESTIMADO: ${formatMoney(subtotal, store.currency_symbol || "$")}*\n\n` +
+      `_¡Aguardamos su confirmación para coordinar el horario! Gracias._`
+    );
+  };
 
+  // Generar link de pedido por WhatsApp 100% dinámico con número normalizado
+  const handleWhatsAppCheckout = () => {
+    if (cart.length === 0 || !store) return;
+
+    if (!store.whatsapp_number) {
+      triggerToast("El número de WhatsApp de la tienda no está configurado.");
+      return;
+    }
+
+    const errors: { name?: string; address?: string } = {};
+
+    if (!customerName.trim()) {
+      errors.name = "Por favor ingresá tu nombre y apellido.";
+    }
+
+    if (deliveryMethod === "delivery" && !deliveryAddress.trim()) {
+      errors.address = "Por favor ingresá la dirección de entrega.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      triggerToast("Por favor completá los datos requeridos para el pedido.");
+      return;
+    }
+
+    setValidationErrors({});
+
+    const message = buildOrderMessage();
     const encodedMessage = encodeURIComponent(message);
-    const whatsappCleanNumber = store.whatsapp_number.replace(/\D/g, "");
+    const whatsappCleanNumber = normalizeWhatsAppNumber(store.whatsapp_number);
     const whatsappUrl = `https://wa.me/${whatsappCleanNumber}?text=${encodedMessage}`;
 
     window.open(whatsappUrl, "_blank");
   };
 
+  // Copiar pedido al portapapeles como respaldo
+  const handleCopyOrder = () => {
+    if (cart.length === 0 || !store) return;
+
+    const errors: { name?: string; address?: string } = {};
+    if (!customerName.trim()) {
+      errors.name = "Por favor ingresá tu nombre y apellido.";
+    }
+    if (deliveryMethod === "delivery" && !deliveryAddress.trim()) {
+      errors.address = "Por favor ingresá la dirección de entrega.";
+    }
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      triggerToast("Por favor completá tus datos antes de copiar el pedido.");
+      return;
+    }
+
+    setValidationErrors({});
+    const message = buildOrderMessage();
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(message);
+      triggerToast("¡Pedido copiado! Ya podés pegarlo en tu chat de WhatsApp.");
+    } else {
+      triggerToast("No se pudo acceder al portapapeles en este navegador.");
+    }
+  };
+
   // Abrir chat directo por WhatsApp con consulta general
   const handleDirectWhatsApp = () => {
-    const rawNumber = store.whatsapp_number || "5491100000000";
-    const cleanNumber = rawNumber.replace(/\D/g, "");
+    if (!store?.whatsapp_number) {
+      triggerToast("El número de WhatsApp de la tienda aún no ha sido configurado.");
+      return;
+    }
+    const cleanNumber = normalizeWhatsAppNumber(store.whatsapp_number);
     const greetingMessage = encodeURIComponent(
-      `¡Hola ${store.name}! Quisiera hacer una consulta sobre la pastelería.`
+      `¡Hola ${store.name}! Quisiera hacer una consulta sobre los productos.`
     );
     window.open(`https://wa.me/${cleanNumber}?text=${greetingMessage}`, "_blank");
   };
+
+  if (isLoading && !store) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
+          <div className="h-16 w-16 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center font-serif text-2xl font-bold shadow-lg animate-pulse">
+            VL
+          </div>
+          <div className="space-y-2 text-center">
+            <div className="h-4 w-36 bg-secondary rounded-full animate-shimmer mx-auto" />
+            <div className="h-3 w-48 bg-secondary/70 rounded-full animate-shimmer mx-auto" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!store) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-6 text-center">
+        <div className="max-w-md bg-card p-8 rounded-3xl border border-border shadow-xl space-y-4">
+          <div className="h-14 w-14 rounded-2xl bg-secondary text-primary mx-auto flex items-center justify-center font-serif text-xl font-bold">
+            VL
+          </div>
+          <h1 className="font-serif text-2xl font-bold text-primary">Tienda no encontrada</h1>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            No pudimos conectar con la tienda en Supabase. Verificá que la tienda exista en la base de datos o que las variables de entorno estén configuradas.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-5 py-2.5 bg-primary text-primary-foreground text-xs font-bold rounded-xl shadow-md hover:opacity-90 transition-opacity"
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-accent/40 selection:text-foreground">
@@ -398,7 +517,15 @@ export function Storefront({
       {/* Top Announcement Bar Dinámico */}
       <div className="bg-primary px-4 py-2 text-center text-xs font-medium text-primary-foreground/90 border-b border-primary-foreground/10 flex items-center justify-center gap-2 transition-colors">
         <Sparkles className="h-3.5 w-3.5 text-accent animate-pulse" />
-        <span>Abierto Jueves a Domingo: Mañanas 08 a 10 hs (con Delivery) y Tardes 16 a 20 hs (Retiro en local).</span>
+        <span>
+          {store.opening_hours_weekdays || store.opening_hours_weekends
+            ? `${store.opening_hours_weekdays || ""}${
+                store.opening_hours_weekends
+                  ? ` · ${store.opening_hours_weekends}`
+                  : ""
+              }`
+            : "¡Bienvenido a nuestro catálogo digital! Hacé tu pedido online y coordinamos por WhatsApp."}
+        </span>
         {store.free_shipping_threshold > 0 && (
           <>
             <span className="hidden md:inline text-primary-foreground/50">|</span>
@@ -537,7 +664,7 @@ export function Storefront({
                   </div>
                   <div className="text-xs">
                     <p className="font-bold text-primary">100% Artesanal</p>
-                    <p className="text-muted-foreground text-[11px]">Sin conservantes</p>
+                    <p className="text-muted-foreground text-[11px]">Calidad garantizada</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2.5 group">
@@ -545,8 +672,8 @@ export function Storefront({
                     <Truck className="h-4 w-4" />
                   </div>
                   <div className="text-xs">
-                    <p className="font-bold text-primary">Delivery Mañanas</p>
-                    <p className="text-muted-foreground text-[11px]">08:00 a 10:00 hs</p>
+                    <p className="font-bold text-primary">Envíos y Retiro</p>
+                    <p className="text-muted-foreground text-[11px]">Coordinación directa</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2.5 group">
@@ -554,8 +681,8 @@ export function Storefront({
                     <Clock className="h-4 w-4" />
                   </div>
                   <div className="text-xs">
-                    <p className="font-bold text-primary">Jueves a Domingo</p>
-                    <p className="text-muted-foreground text-[11px]">Mañana y tarde</p>
+                    <p className="font-bold text-primary">Atención Directa</p>
+                    <p className="text-muted-foreground text-[11px]">Vía WhatsApp</p>
                   </div>
                 </div>
               </div>
@@ -585,9 +712,12 @@ export function Storefront({
                         src={
                           p.image_url ||
                           store.hero_image_url ||
-                          "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=800&q=80"
+                          DEFAULT_PRODUCT_IMAGE
                         }
                         alt={p.name}
+                        onError={(e) => {
+                          e.currentTarget.src = DEFAULT_PRODUCT_IMAGE;
+                        }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                       />
                     </div>
@@ -744,6 +874,23 @@ export function Storefront({
             </div>
           </div>
 
+          {/* Indicador de resultados de búsqueda */}
+          {searchQuery.trim() && (
+            <div className="flex items-center justify-between gap-2 p-3 rounded-xl bg-secondary/50 border border-border text-xs text-muted-foreground animate-in fade-in">
+              <p>
+                Mostrando <strong className="text-primary">{filteredProducts.length}</strong>{" "}
+                {filteredProducts.length === 1 ? "resultado" : "resultados"} para &ldquo;
+                <span className="font-semibold text-foreground">{searchQuery}</span>&rdquo;
+              </p>
+              <button
+                onClick={() => setSearchQuery("")}
+                className="text-[11px] font-bold text-primary hover:underline"
+              >
+                Limpiar filtro
+              </button>
+            </div>
+          )}
+
           {/* Category Tabs Dinámicos con touch feedback y momentum scroll */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none snap-x touch-pan-x">
             <button
@@ -858,11 +1005,11 @@ export function Storefront({
                       {/* Product Image & Badges con Zoom suave */}
                       <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
                         <img
-                          src={
-                            product.image_url ||
-                            "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80"
-                          }
+                          src={product.image_url || DEFAULT_PRODUCT_IMAGE}
                           alt={product.name}
+                          onError={(e) => {
+                            e.currentTarget.src = DEFAULT_PRODUCT_IMAGE;
+                          }}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                           loading="lazy"
                         />
@@ -1042,11 +1189,11 @@ export function Storefront({
 
             <div className="relative aspect-[16/10] sm:aspect-[16/9] bg-secondary">
               <img
-                src={
-                  quickViewProduct.image_url ||
-                  "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80"
-                }
+                src={quickViewProduct.image_url || DEFAULT_PRODUCT_IMAGE}
                 alt={quickViewProduct.name}
+                onError={(e) => {
+                  e.currentTarget.src = DEFAULT_PRODUCT_IMAGE;
+                }}
                 className="w-full h-full object-cover"
               />
               <button
@@ -1085,7 +1232,7 @@ export function Storefront({
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-3 border-t border-border gap-4">
+              <div className="flex items-center justify-between pt-3 border-t border-border gap-4 flex-wrap sm:flex-nowrap">
                 <div>
                   <p className="text-[11px] text-muted-foreground uppercase font-semibold">Precio unitario</p>
                   <p className="text-2xl font-bold text-primary">
@@ -1093,17 +1240,55 @@ export function Storefront({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      addToCart(quickViewProduct);
-                      setQuickViewProduct(null);
-                    }}
-                    className="flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-2xl font-bold text-sm shadow-md hover:bg-primary/90 active:scale-95 transition-all press-feedback"
-                  >
-                    <Plus className="h-4 w-4 text-accent" />
-                    <span>Agregar al Pedido</span>
-                  </button>
+                <div className="flex items-center gap-2">
+                  {getItemQuantity(quickViewProduct.id) > 0 ? (
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex items-center rounded-2xl bg-secondary border border-border p-1 gap-1.5 shadow-xs">
+                        <button
+                          onClick={() => updateQuantity(quickViewProduct.id, -1)}
+                          className="h-9 w-9 rounded-xl bg-card text-foreground flex items-center justify-center hover:bg-muted active:scale-90 font-bold text-sm transition-transform shadow-xs press-feedback"
+                          aria-label="Restar una unidad"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </button>
+                        <div className="flex flex-col items-center px-1.5">
+                          <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
+                            En carrito
+                          </span>
+                          <span className="text-sm font-extrabold text-primary tabular-nums">
+                            {getItemQuantity(quickViewProduct.id)}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => updateQuantity(quickViewProduct.id, 1)}
+                          className="h-9 w-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:opacity-90 active:scale-90 font-bold text-sm transition-transform shadow-xs press-feedback"
+                          aria-label="Sumar una unidad"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setQuickViewProduct(null);
+                          setIsCartOpen(true);
+                        }}
+                        className="flex items-center gap-1.5 bg-primary text-primary-foreground px-4 py-3 rounded-2xl font-bold text-xs shadow-md hover:bg-primary/90 active:scale-95 transition-all press-feedback"
+                      >
+                        <ShoppingBag className="h-3.5 w-3.5 text-accent" />
+                        <span>Ver Pedido</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        addToCart(quickViewProduct);
+                      }}
+                      className="flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-2xl font-bold text-sm shadow-md hover:bg-primary/90 active:scale-95 transition-all press-feedback"
+                    >
+                      <Plus className="h-4 w-4 text-accent" />
+                      <span>Agregar al Pedido</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1148,17 +1333,20 @@ export function Storefront({
               <div className="px-5 py-3 bg-accent/20 border-b border-accent/30 text-xs">
                 {subtotal >= store.free_shipping_threshold ? (
                   <div className="flex items-center gap-2 font-bold text-accent-foreground animate-in zoom-in-95 duration-200">
-                    <Check className="h-4 w-4" />
-                    <span>¡Felicitaciones! Tenés envío gratis en este pedido.</span>
+                    <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+                    <span>¡Felicitaciones! Tu pedido tiene <strong>Envío Gratis</strong>.</span>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] text-accent-foreground font-semibold">
+                    <div className="flex justify-between text-[11px] text-accent-foreground font-medium">
                       <span>
-                        Sumá {formatMoney(store.free_shipping_threshold - subtotal, store.currency_symbol)} más para <strong>Envío Gratis</strong>
+                        ¡Sumá <strong>{formatMoney(store.free_shipping_threshold - subtotal, store.currency_symbol)}</strong> más para <strong>Envío Gratis</strong>!
+                      </span>
+                      <span className="font-bold text-primary">
+                        {Math.round((subtotal / store.free_shipping_threshold) * 100)}%
                       </span>
                     </div>
-                    <div className="h-2 w-full bg-card rounded-full overflow-hidden border border-accent/40">
+                    <div className="h-2 w-full bg-card rounded-full overflow-hidden border border-accent/40 shadow-inner">
                       <div
                         className="h-full bg-primary transition-all duration-500 ease-out"
                         style={{
@@ -1200,11 +1388,11 @@ export function Storefront({
                         className="flex items-center gap-3 p-3 rounded-2xl bg-secondary/40 border border-border transition-all duration-200 hover:border-primary/30"
                       >
                         <img
-                          src={
-                            item.product.image_url ||
-                            "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80"
-                          }
+                          src={item.product.image_url || DEFAULT_PRODUCT_IMAGE}
                           alt={item.product.name}
+                          onError={(e) => {
+                            e.currentTarget.src = DEFAULT_PRODUCT_IMAGE;
+                          }}
                           className="h-14 w-14 rounded-xl object-cover shrink-0"
                         />
                         <div className="min-w-0 flex-1">
@@ -1263,10 +1451,27 @@ export function Storefront({
                         type="text"
                         required
                         value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
+                        onChange={(e) => {
+                          setCustomerName(e.target.value);
+                          if (validationErrors.name) {
+                            setValidationErrors((prev) => ({
+                              ...prev,
+                              name: undefined,
+                            }));
+                          }
+                        }}
                         placeholder="Ej. Martín Gómez"
-                        className="w-full rounded-xl border border-input bg-card px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-ring transition-shadow"
+                        className={`w-full rounded-xl border bg-card px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-ring transition-all ${
+                          validationErrors.name
+                            ? "border-destructive ring-1 ring-destructive"
+                            : "border-input"
+                        }`}
                       />
+                      {validationErrors.name && (
+                        <p className="text-[11px] text-destructive mt-1 font-medium animate-in fade-in">
+                          {validationErrors.name}
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -1337,10 +1542,27 @@ export function Storefront({
                           <input
                             type="text"
                             value={deliveryAddress}
-                            onChange={(e) => setDeliveryAddress(e.target.value)}
+                            onChange={(e) => {
+                              setDeliveryAddress(e.target.value);
+                              if (validationErrors.address) {
+                                setValidationErrors((prev) => ({
+                                  ...prev,
+                                  address: undefined,
+                                }));
+                              }
+                            }}
                             placeholder="Calle, número, piso/depto, barrio"
-                            className="w-full rounded-xl border border-input bg-card px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-ring transition-shadow"
+                            className={`w-full rounded-xl border bg-card px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-ring transition-all ${
+                              validationErrors.address
+                                ? "border-destructive ring-1 ring-destructive"
+                                : "border-input"
+                            }`}
                           />
+                          {validationErrors.address && (
+                            <p className="text-[11px] text-destructive mt-1 font-medium animate-in fade-in">
+                              {validationErrors.address}
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1394,6 +1616,15 @@ export function Storefront({
                 >
                   <MessageCircle className="h-5 w-5 fill-white" />
                   <span>Confirmar Pedido por WhatsApp</span>
+                </button>
+
+                <button
+                  onClick={handleCopyOrder}
+                  className="w-full py-2.5 px-4 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground text-xs font-semibold flex items-center justify-center gap-2 border border-border transition-all press-feedback"
+                  title="Copiar texto del pedido para enviar manualmente"
+                >
+                  <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Copiar detalle del pedido</span>
                 </button>
 
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">

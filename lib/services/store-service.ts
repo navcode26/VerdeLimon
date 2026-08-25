@@ -12,10 +12,11 @@ const DEFAULT_SLUG = process.env.NEXT_PUBLIC_STORE_SLUG || "verde-limon";
  * Obtiene la configuración de una tienda por su slug único.
  */
 export async function getStoreBySlug(
-  slug: string = DEFAULT_SLUG
+  slug: string = DEFAULT_SLUG,
+  customClient?: any
 ): Promise<{ data: Store | null; error: string | null }> {
   try {
-    const supabase = createClient();
+    const supabase = customClient || createClient();
     const { data, error } = await supabase
       .from("stores")
       .select("*")
@@ -37,10 +38,11 @@ export async function getStoreBySlug(
  * Obtiene las categorías de una tienda ordenadas por display_order.
  */
 export async function getCategoriesByStore(
-  storeId: string
+  storeId: string,
+  customClient?: any
 ): Promise<{ data: Category[]; error: string | null }> {
   try {
-    const supabase = createClient();
+    const supabase = customClient || createClient();
     const { data, error } = await supabase
       .from("categories")
       .select("*")
@@ -62,10 +64,11 @@ export async function getCategoriesByStore(
  * Obtiene los productos activos para el catálogo público de la tienda.
  */
 export async function getActiveProductsByStore(
-  storeId: string
+  storeId: string,
+  customClient?: any
 ): Promise<{ data: Product[]; error: string | null }> {
   try {
-    const supabase = createClient();
+    const supabase = customClient || createClient();
     const { data, error } = await supabase
       .from("products")
       .select("*, category:categories(*)")
