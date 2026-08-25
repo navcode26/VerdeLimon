@@ -1504,29 +1504,34 @@ export function Storefront({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setDeliveryMethod("delivery")}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${deliveryMethod === "delivery"
-                            ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                            : "bg-card border-border text-muted-foreground hover:bg-secondary"
-                          }`}
-                      >
-                        <Truck className="h-3.5 w-3.5" />
-                        <span>Envío a domicilio</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeliveryMethod("pickup")}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${deliveryMethod === "pickup"
-                            ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                            : "bg-card border-border text-muted-foreground hover:bg-secondary"
-                          }`}
-                      >
-                        <MapPin className="h-3.5 w-3.5" />
-                        <span>Retiro en local</span>
-                      </button>
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+                        Forma de entrega
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeliveryMethod("delivery")}
+                          className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${deliveryMethod === "delivery"
+                              ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                              : "bg-card border-border text-muted-foreground hover:bg-secondary"
+                            }`}
+                        >
+                          <Truck className="h-3.5 w-3.5" />
+                          <span>Envío a domicilio</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeliveryMethod("pickup")}
+                          className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all press-feedback ${deliveryMethod === "pickup"
+                              ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                              : "bg-card border-border text-muted-foreground hover:bg-secondary"
+                            }`}
+                        >
+                          <MapPin className="h-3.5 w-3.5" />
+                          <span>Retiro en local</span>
+                        </button>
+                      </div>
                     </div>
 
                     {deliveryMethod === "delivery" && (
