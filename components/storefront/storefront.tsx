@@ -1730,10 +1730,18 @@ export function Storefront({
                   "Elaboramos pastelería y panadería honesta, utilizando recetas clásicas combinadas con técnicas modernas y materia prima de máxima calidad."}
               </p>
               {store.address_text && (
-                <p className="text-xs text-primary-foreground/70 flex items-center gap-1.5 pt-1">
-                  <MapPin className="h-3.5 w-3.5 text-accent" />
-                  <span>{store.address_text}</span>
-                </p>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    store.address_text
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary-foreground/75 hover:text-primary-foreground flex items-center gap-1.5 pt-1 transition-colors group cursor-pointer w-fit"
+                  title="Ver ubicación en Google Maps"
+                >
+                  <MapPin className="h-3.5 w-3.5 text-accent group-hover:scale-110 transition-transform shrink-0" />
+                  <span className="group-hover:underline underline-offset-2">{store.address_text}</span>
+                </a>
               )}
             </div>
 
