@@ -355,7 +355,7 @@ export function Storefront({
     const itemsText = cart
       .map(
         (item, index) =>
-          `${index + 1}. *${item.product.name}* x ${item.quantity} = ${formatMoney(
+          `${index + 1}. ${item.product.name} x ${item.quantity} = ${formatMoney(
             item.product.price * item.quantity,
             store.currency_symbol || "$"
           )}`
@@ -369,18 +369,18 @@ export function Storefront({
 
     const deliveryLabel =
       deliveryMethod === "delivery"
-        ? `Envío a domicilio - ${deliveryAddress}`
+        ? `Envío a domicilio — ${deliveryAddress.trim()}`
         : "Retiro por el local";
 
     return (
-      `🧁 *¡Hola ${store.name}! Quiero realizar este pedido:*\n\n` +
-      `👤 *Cliente:* ${customerName.trim()}\n` +
-      `📦 *Entrega:* ${deliveryLabel}\n` +
-      `💳 *Pago:* ${paymentLabel}\n` +
-      (orderNotes.trim() ? `📝 *Notas:* ${orderNotes.trim()}\n` : "") +
-      `\n🛒 *Detalle de productos:*\n${itemsText}\n\n` +
-      `💰 *TOTAL ESTIMADO: ${formatMoney(subtotal, store.currency_symbol || "$")}*\n\n` +
-      `_¡Aguardamos su confirmación para coordinar el horario! Gracias._`
+      `*¡Hola ${store.name}! Quiero realizar un pedido:*\n\n` +
+      `*Cliente:* ${customerName.trim()}\n` +
+      `*Entrega:* ${deliveryLabel}\n` +
+      `*Pago:* ${paymentLabel}\n` +
+      (orderNotes.trim() ? `*Notas:* ${orderNotes.trim()}\n` : "") +
+      `\n*Detalle del pedido:*\n${itemsText}\n\n` +
+      `*Total:* ${formatMoney(subtotal, store.currency_symbol || "$")}\n\n` +
+      `_Quedo a la espera de su confirmación para coordinar el horario. ¡Muchas gracias!_`
     );
   };
 
